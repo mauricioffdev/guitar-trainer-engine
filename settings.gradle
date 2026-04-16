@@ -1,0 +1,3 @@
+rootProject.name = 'guitar-trainer-engine'
+
+include 'core', 'desktop'

@@ -1,0 +1,25 @@
+allprojects {
+    repositories {
+        mavenCentral()
+    }
+}
+
+ext {
+    gdxVersion = '1.12.1'
+}
+
+subprojects {
+    apply plugin: 'java'
+
+    layout.buildDirectory.set(file("${System.getProperty('java.io.tmpdir')}/guitar-trainer-engine-build/${project.name}"))
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(17)
+        }
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+    }
+}
