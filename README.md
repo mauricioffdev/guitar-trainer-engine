@@ -69,3 +69,15 @@ No terminal, na raiz do projeto:
 ```bash
 ./gradlew desktop:run
 ```
+
+## Uso do Codex na arquitetura
+
+Este projeto foi desenvolvido com apoio do Codex como copiloto tecnico para:
+
+- diagnosticar bugs de sincronizacao entre audio, spawn e julgamento de notas;
+- refatorar o loop principal mantendo a arquitetura existente (sem quebrar os sistemas centrais);
+- ajustar o fluxo de reinicio de partida com reset consistente de estado;
+- evoluir a experiencia com tela de resultado e tempo de run configuravel;
+- acelerar iteracoes com validacao rapida de compilacao e correcoes incrementais.
+
+Importante: as decisoes finais de arquitetura, regras de jogo e priorizacao de features foram conduzidas pelo autor do projeto.
