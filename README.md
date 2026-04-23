@@ -10,13 +10,24 @@ Protótipo de jogo de ritmo estilo Guitar Hero/Guitar Trainer usando Java + LibG
 ## Mecânicas atuais
 
 - Input nas lanes com `A`, `S`, `D`, `F`
+- Input de guitarra no desktop (microfone/interface), mapeado para lanes:
+  - `E2 -> A`
+  - `A2 -> S`
+  - `D3 -> D`
+  - `G3 -> F`
 - Julgamento de timing por janela de acerto:
   - `PERFECT`
   - `OK`
   - `MISS`
+- Sincronia de hit da guitarra com compensacao de latencia:
+  - eventos de guitarra carregam timestamp de captura
+  - julgamento usa tempo estimado do evento (nao apenas o frame atual)
+  - offset configuravel em `GameConfig.GUITAR_INPUT_OFFSET_SECONDS`
+- Janela de acerto da guitarra levemente mais tolerante que teclado (melhor robustez no mundo real)
 - Sistema de score e combo
 - Mapa de notas em loop durante a run
 - Tempo de partida fixo em `30s`
+- Tuner em tempo real para guitarra (input de microfone/interface no desktop)
 - Tela de resultado ao final da partida com:
   - score final
   - combo máximo
@@ -25,8 +36,27 @@ Protótipo de jogo de ritmo estilo Guitar Hero/Guitar Trainer usando Java + LibG
 ## Controles
 
 - `A / S / D / F`: tocar notas nas lanes
+- Guitarra (desktop): tocar as cordas mapeadas (`E2`, `A2`, `D3`, `G3`) para acionar lanes
 - `R`: reiniciar a run imediatamente
 - `ENTER` ou `SPACE` (na tela de resultado): jogar novamente
+
+## Guitarra / Tuner
+
+- O launcher desktop inicia captura de input da guitarra via `TargetDataLine`.
+- O HUD mostra status do input, nota detectada, cents e confianca.
+- A deteccao usa melhor correspondencia entre notas alvo (E/A/D/G), com tolerancia por corda e analise entre oitavas proximas.
+- Para melhor deteccao, prefira sinal limpo (ou com pouca distorcao).
+
+## Ajuste de latencia
+
+Se o hit parecer atrasado/adiantado com guitarra, ajuste:
+
+- `core/src/main/java/com/guitartrainer/config/GameConfig.java`
+- constante `GUITAR_INPUT_OFFSET_SECONDS`
+
+Sugestao pratica:
+- aumentar valor: compensa atraso percebido
+- diminuir valor: corrige quando o hit parece adiantado
 
 ## Áudio
 
@@ -52,6 +82,9 @@ Se nenhum desses nomes existir, o jogo tenta usar o primeiro arquivo de áudio e
 - `Note`: entidade de nota com `targetTime`
 - `NoteSpawner`: spawn de notas a partir do mapa
 - `InputHandler`: captura input do jogador
+- `GuitarInputService`: contrato de captura de eventos de guitarra + snapshots
+- `DesktopGuitarInputService`: implementacao desktop com detecao de pitch e fila de eventos com timestamp
+- `PitchSnapshot`: snapshot de pitch/confianca para HUD e depuracao
 - `CollisionSystem`: valida acerto por lane + timing
 - `ScoreSystem`: pontuação, combo e multiplicador
 - `AudioManager`: carregamento e controle de reprodução de música

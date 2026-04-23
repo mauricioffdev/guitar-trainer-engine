@@ -7,18 +7,18 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 public class HitEffect {
 
     private static final float DURATION_SECONDS = 0.3f;
-
     private static final float START_SIZE = 32f;
-    private static final float PEAK_SIZE = 72f;
+    private static final float PEAK_SIZE = 80f;
 
     private final float x;
     private final float y;
-
+    private final Color color;
     private float timer;
 
-    public HitEffect(float x, float y) {
+    public HitEffect(float x, float y, Color color) {
         this.x = x;
         this.y = y;
+        this.color = color;
         this.timer = DURATION_SECONDS;
     }
 
@@ -44,7 +44,7 @@ public class HitEffect {
 
         Color previous = batch.getColor();
 
-        batch.setColor(1f, 1f, 1f, alpha);
+        batch.setColor(color.r, color.g, color.b, alpha);
 
         batch.draw(
                 texture,

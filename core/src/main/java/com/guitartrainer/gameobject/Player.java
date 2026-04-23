@@ -2,6 +2,7 @@ package com.guitartrainer.gameobject;
 
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.guitartrainer.config.GameConfig;
 import com.guitartrainer.input.LaneKey;
@@ -12,15 +13,18 @@ import java.util.Set;
 
 public class Player extends GameObject {
 
-    private static final float FLASH_DURATION = 0.12f;
+    private static final float FLASH_DURATION = 0.15f;
+    private static final BitmapFont LABEL_FONT = new BitmapFont();
+
+    static {
+        LABEL_FONT.getData().setScale(0.9f);
+    }
 
     private final Map<LaneKey, Float> laneFlashTimers;
 
     public Player() {
         super(0f, 0f, 0f, 0f);
-
         this.laneFlashTimers = new EnumMap<>(LaneKey.class);
-
         for (LaneKey laneKey : LaneKey.values()) {
             laneFlashTimers.put(laneKey, 0f);
         }
@@ -30,11 +34,9 @@ public class Player extends GameObject {
     public void update(float deltaTime) {
         for (LaneKey laneKey : LaneKey.values()) {
             float current = laneFlashTimers.get(laneKey);
-
             if (current > 0f) {
                 current -= deltaTime;
-                if (current < 0f) current = 0f;
-                laneFlashTimers.put(laneKey, current);
+                laneFlashTimers.put(laneKey, Math.max(0f, current));
             }
         }
     }
@@ -50,41 +52,41 @@ public class Player extends GameObject {
         Color previous = batch.getColor();
 
         for (LaneKey laneKey : LaneKey.values()) {
-
             float laneX = laneToX(laneKey);
             float flashTimer = laneFlashTimers.get(laneKey);
+            boolean flashing = flashTimer > 0f;
 
-            batch.setColor(getLaneColor(laneKey, flashTimer));
+            // button body
+            batch.setColor(getLaneColor(laneKey, flashing));
+            batch.draw(pixelTexture, laneX, GameConfig.HIT_LINE_Y - 20f, GameConfig.LANE_WIDTH, 22f);
 
-            batch.draw(
-                    pixelTexture,
-                    laneX,
-                    GameConfig.HIT_LINE_Y - 6f,
-                    GameConfig.LANE_WIDTH,
-                    14f
-            );
+            // string name label
+            LABEL_FONT.setColor(flashing ? Color.BLACK : Color.WHITE);
+            String label = laneToStringName(laneKey);
+            LABEL_FONT.draw(batch, label, laneX + GameConfig.LANE_WIDTH * 0.5f - 12f, GameConfig.HIT_LINE_Y - 4f);
         }
 
         batch.setColor(previous);
     }
 
-    private Color getLaneColor(LaneKey laneKey, float flashTimer) {
-
-        if (flashTimer > 0f) {
-            return Color.GOLD;
+    private String laneToStringName(LaneKey key) {
+        switch (key) {
+            case A: return "E2";
+            case S: return "A2";
+            case D: return "D3";
+            case F: return "G3";
+            default: return "?";
         }
+    }
 
+    private Color getLaneColor(LaneKey laneKey, boolean flashing) {
+        if (flashing) return Color.GOLD;
         switch (laneKey) {
-            case A:
-                return new Color(0.3f, 0.5f, 0.8f, 1f);
-            case S:
-                return new Color(0.3f, 0.8f, 0.3f, 1f);
-            case D:
-                return new Color(0.9f, 0.5f, 0.2f, 1f);
-            case F:
-                return new Color(0.9f, 0.3f, 0.3f, 1f);
-            default:
-                return Color.DARK_GRAY;
+            case A: return new Color(0.2f, 0.5f, 0.85f, 1f);
+            case S: return new Color(0.2f, 0.75f, 0.25f, 1f);
+            case D: return new Color(0.9f, 0.5f, 0.15f, 1f);
+            case F: return new Color(0.85f, 0.25f, 0.25f, 1f);
+            default: return Color.DARK_GRAY;
         }
     }
 
