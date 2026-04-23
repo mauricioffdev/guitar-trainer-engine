@@ -2,6 +2,7 @@ package com.guitartrainer;
 
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration;
+import com.guitartrainer.audio.DesktopGuitarInputService;
 import com.guitartrainer.config.GameConfig;
 
 public class DesktopLauncher {
@@ -15,6 +16,6 @@ public class DesktopLauncher {
         config.useVsync(true);
         config.setForegroundFPS(60);
 
-        new Lwjgl3Application(new GameMain(), config);
+        new Lwjgl3Application(new GameMain(new DesktopGuitarInputService()), config);
     }
 }

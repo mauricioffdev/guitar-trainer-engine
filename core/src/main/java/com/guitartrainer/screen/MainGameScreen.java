@@ -12,6 +12,9 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.guitartrainer.GameMain;
+import com.guitartrainer.audio.GuitarInputService;
+import com.guitartrainer.audio.GuitarInputService.LaneEvent;
+import com.guitartrainer.audio.PitchSnapshot;
 import com.guitartrainer.config.GameConfig;
 import com.guitartrainer.gameobject.HitEffect;
 import com.guitartrainer.gameobject.Note;
@@ -34,11 +37,16 @@ public class MainGameScreen extends ScreenAdapter {
     private static final float HIT_FEEDBACK_DURATION = 0.5f;
     private static final float MAX_RUN_DURATION_SECONDS = 30f;
     private static final String AUDIO_DIR = "audio";
+    private static final float MAX_GUITAR_EVENT_AGE_SECONDS = 1.0f;
 
     private static final float SCORE_SCALE = 1.0f;
     private static final float COMBO_SCALE = 2.2f;
     private static final float FEEDBACK_BASE_SCALE = 1.4f;
     private static final float FEEDBACK_SCALE_FACTOR = 1.5f;
+    private static final float A4_REFERENCE_HZ = 440f;
+    private static final String[] NOTE_NAMES = {
+            "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
+    };
 
     private final GameMain game;
     private SpriteBatch spriteBatch;
@@ -53,6 +61,7 @@ public class MainGameScreen extends ScreenAdapter {
     private CollisionSystem collisionSystem;
     private ScoreSystem scoreSystem;
     private AudioManager audioManager;
+    private GuitarInputService guitarInputService;
 
     private List<Note> notes;
     private List<HitEffect> hitEffects;
@@ -90,6 +99,8 @@ public class MainGameScreen extends ScreenAdapter {
 
         audioManager = new AudioManager();
         audioManager.load(resolveTrackPath());
+        guitarInputService = game.getGuitarInputService();
+        guitarInputService.start();
 
         NoteMapLoader loader = new NoteMapLoader();
         noteSpawner.setNoteMap(loader.loadTestMap());
@@ -188,35 +199,42 @@ public class MainGameScreen extends ScreenAdapter {
             }
         }
 
-        Set<LaneKey> pressedLanes = inputHandler.consumePressedLanes();
+        Set<LaneKey> keyboardLanes = inputHandler.consumePressedLanes();
+        List<LaneEvent> guitarEvents = drainGuitarEvents();
+        Set<LaneKey> guitarLanes = new java.util.HashSet<>();
 
-        player.onInput(pressedLanes);
+        long nowNanos = System.nanoTime();
+        for (LaneEvent event : guitarEvents) {
+            float ageSeconds = (nowNanos - event.captureTimeNanos()) / 1_000_000_000f;
+            if (ageSeconds < 0f || ageSeconds > MAX_GUITAR_EVENT_AGE_SECONDS) {
+                continue;
+            }
+
+            float estimatedEventTime = mapElapsedTime - ageSeconds;
+            if (estimatedEventTime < 0f) {
+                continue;
+            }
+
+            guitarLanes.add(event.laneKey());
+            collisionSystem.processInputEvent(notes, event.laneKey(), estimatedEventTime, true,
+                    (note, result) -> handleHitResult(note, result));
+        }
+
+        Set<LaneKey> allLanes = new java.util.HashSet<>(keyboardLanes);
+        allLanes.addAll(guitarLanes);
+
+        player.onInput(allLanes);
         player.update(deltaTime);
 
-        collisionSystem.processHits(
-                notes,
-                pressedLanes,
-                mapElapsedTime,
-                (note, result) -> {
-
-                    switch (result) {
-                        case PERFECT -> {
-                            scoreSystem.register(ScoreSystem.HitGrade.PERFECT);
-                            showHitFeedback("PERFECT");
-                            spawnHitEffect(note);
-                        }
-                        case OK -> {
-                            scoreSystem.register(ScoreSystem.HitGrade.OK);
-                            showHitFeedback("OK");
-                            spawnHitEffect(note);
-                        }
-                        case MISS -> {
-                            scoreSystem.register(ScoreSystem.HitGrade.MISS);
-                            showHitFeedback("MISS");
-                        }
-                    }
-                }
-        );
+        if (!keyboardLanes.isEmpty()) {
+            for (LaneKey lane : keyboardLanes) {
+                collisionSystem.processInputEvent(notes, lane, mapElapsedTime, false,
+                        (note, result) -> handleHitResult(note, result));
+            }
+        }
+        // auto-miss tick: no input, just expire overdue notes
+        collisionSystem.processAutoMisses(notes, mapElapsedTime,
+                (note, result) -> handleHitResult(note, result));
 
         removeResolvedNotes();
         updateHitEffects(deltaTime);
@@ -229,7 +247,31 @@ public class MainGameScreen extends ScreenAdapter {
         }
     }
 
+    private List<LaneEvent> drainGuitarEvents() {
+        return guitarInputService.drainLaneEvents();
+    }
+
+    private void handleHitResult(Note note, CollisionSystem.HitResult result) {
+        switch (result) {
+            case PERFECT -> {
+                scoreSystem.register(ScoreSystem.HitGrade.PERFECT);
+                showHitFeedback("PERFECT");
+                spawnHitEffect(note);
+            }
+            case OK -> {
+                scoreSystem.register(ScoreSystem.HitGrade.OK);
+                showHitFeedback("OK");
+                spawnHitEffect(note);
+            }
+            case MISS -> {
+                scoreSystem.register(ScoreSystem.HitGrade.MISS);
+                showHitFeedback("MISS");
+            }
+        }
+    }
+
     private void startRun() {
+        guitarInputService.drainLaneEvents();
         fallbackElapsedTime = 0f;
         lastAudioPosition = 0f;
         mapStartTime = 0f;
@@ -242,6 +284,7 @@ public class MainGameScreen extends ScreenAdapter {
     }
 
     private void restartRun() {
+        guitarInputService.drainLaneEvents();
         notes.clear();
         hitEffects.clear();
         noteSpawner.resetMap();
@@ -434,10 +477,22 @@ public class MainGameScreen extends ScreenAdapter {
     private void spawnHitEffect(Note note) {
         if (note == null) return;
 
+        Color laneColor = laneToColor(note.getLaneKey());
         hitEffects.add(new HitEffect(
                 note.getX() + note.getWidth() * 0.5f,
-                GameConfig.HIT_LINE_Y
+                GameConfig.HIT_LINE_Y,
+                laneColor
         ));
+    }
+
+    private Color laneToColor(LaneKey key) {
+        switch (key) {
+            case A: return new Color(0.2f, 0.6f, 1.0f, 1f);
+            case S: return new Color(0.2f, 0.85f, 0.3f, 1f);
+            case D: return new Color(1.0f, 0.55f, 0.1f, 1f);
+            case F: return new Color(1.0f, 0.25f, 0.25f, 1f);
+            default: return Color.WHITE;
+        }
     }
 
     private void drawBackground() {
@@ -485,6 +540,7 @@ public class MainGameScreen extends ScreenAdapter {
         font.draw(spriteBatch, "Max Combo: " + scoreSystem.getMaxCombo(), 20f, GameConfig.SCREEN_HEIGHT - 48f);
         font.draw(spriteBatch, "Time: " + (int) elapsedTime + " / " + (int) runDurationSeconds + "s", 20f, GameConfig.SCREEN_HEIGHT - 76f);
         font.draw(spriteBatch, "Keys: A S D F | R: Restart", 20f, 36f);
+        drawTunerHud();
 
         String comboText = "COMBO " + scoreSystem.getCombo();
 
@@ -494,6 +550,54 @@ public class MainGameScreen extends ScreenAdapter {
         drawCenteredText(comboText, GameConfig.SCREEN_HEIGHT * 0.78f);
 
         font.getData().setScale(1f);
+    }
+
+    private void drawTunerHud() {
+        PitchSnapshot snapshot = guitarInputService.getLatestSnapshot();
+
+        float x = GameConfig.SCREEN_WIDTH - 360f;
+        float y = GameConfig.SCREEN_HEIGHT - 20f;
+
+        font.setColor(Color.WHITE);
+        font.draw(spriteBatch, "Guitar Input", x, y);
+
+        font.setColor(Color.LIGHT_GRAY);
+        font.draw(spriteBatch, snapshot.statusMessage(), x, y - 24f);
+
+        if (!snapshot.hasReliablePitch() || snapshot.frequencyHz() <= 0f) {
+            return;
+        }
+
+        int midi = frequencyToMidi(snapshot.frequencyHz());
+        String noteName = midiToNoteName(midi);
+        float targetFrequency = midiToFrequency(midi);
+        float cents = centsDifference(snapshot.frequencyHz(), targetFrequency);
+
+        font.setColor(Color.WHITE);
+        font.draw(spriteBatch, "Note: " + noteName + "  " + formatCents(cents), x, y - 50f);
+        font.draw(spriteBatch, String.format("Freq: %.1f Hz  Conf: %.2f", snapshot.frequencyHz(), snapshot.confidence()), x, y - 74f);
+    }
+
+    private int frequencyToMidi(float frequencyHz) {
+        return Math.round(69f + (12f * (float) (Math.log(frequencyHz / A4_REFERENCE_HZ) / Math.log(2.0))));
+    }
+
+    private String midiToNoteName(int midi) {
+        int noteIndex = Math.floorMod(midi, 12);
+        int octave = (midi / 12) - 1;
+        return NOTE_NAMES[noteIndex] + octave;
+    }
+
+    private float midiToFrequency(int midi) {
+        return (float) (A4_REFERENCE_HZ * Math.pow(2.0, (midi - 69) / 12.0));
+    }
+
+    private float centsDifference(float frequency, float referenceFrequency) {
+        return (float) (1200.0 * Math.log(frequency / referenceFrequency) / Math.log(2.0));
+    }
+
+    private String formatCents(float cents) {
+        return String.format("%+.1f cents", cents);
     }
 
     private void drawStateLabel() {
@@ -550,6 +654,7 @@ public class MainGameScreen extends ScreenAdapter {
     public void dispose() {
         pixelTexture.dispose();
         font.dispose();
+        guitarInputService.stop();
         audioManager.dispose();
     }
 }

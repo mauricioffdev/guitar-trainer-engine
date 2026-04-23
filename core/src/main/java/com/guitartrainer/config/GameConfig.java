@@ -9,8 +9,9 @@ public final class GameConfig {
     public static final float LANE_GAP = 18f;
     public static final float LANES_START_X = 230f;
 
-    public static final float NOTE_HEIGHT = 28f;
-    public static final float NOTE_TRAVEL_TIME_SECONDS = 1.2f;
+    public static final float NOTE_HEIGHT = 36f;
+    public static final float NOTE_TRAVEL_TIME_SECONDS = 1.8f;
+    public static final float GUITAR_INPUT_OFFSET_SECONDS = 0.03f;
 
     private GameConfig() {
     }
